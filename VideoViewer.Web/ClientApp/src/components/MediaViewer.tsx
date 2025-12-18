@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './styles.css';
 import { FileSystemItem } from '../store/mediaStore';
 import { mediaApi } from '../api/mediaApi';
@@ -67,10 +67,24 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     containerRef.current?.addEventListener('touchend', handleTouchEnd);
   };
 
+  const [showControls, setShowControls] = useState(false);
+  const lastTapRef = useRef(0);
+
+  const handleTouch = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // ms
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      setShowControls((prev) => !prev);
+    }
+    lastTapRef.current = now;
+  };
+
   return (
     <div
       className="media-viewer fullscreen"
       ref={containerRef}
+      onDoubleClick={onClose}
       onTouchStart={handleSwipe}
     >
       <div className="media-container">
@@ -78,11 +92,15 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           <video
             src={mediaUrl}
             autoPlay
-            controls
+            controls={showControls}
             playsInline
+            preload="metadata"
             // iOS specific attribute to avoid native fullscreen
             webkit-playsinline="true"
             className="media-element"
+            onMouseEnter={() => setShowControls(true)}   // desktop hover
+            onMouseLeave={() => setShowControls(false)}
+            onTouchEnd={handleTouch} // double-tap to toggle controls
           />
         )}
         {isImage && (
@@ -99,6 +117,14 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           ←
         </button>
 
+        <button
+          className="control-btn"
+          onClick={onClose}
+          aria-label="Close viewer"
+        >
+          ×
+        </button>
+
         <div className="media-info">
           <h2>{item.name}</h2>
           <p>{item.mediaType}</p>
@@ -112,14 +138,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           →
         </button>
       </div>
-
-      <button
-        className="control-btn close-btn"
-        onClick={onClose}
-        aria-label="Close viewer"
-      >
-        ×
-      </button>
     </div>
   );
 };

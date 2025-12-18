@@ -211,6 +211,10 @@ body {
   object-fit: contain;
 }
 
+.media-element.controls-visible {
+  /* The browser controls will show */
+  controls: true; /* NOTE: Not standard, handled via JS */
+}
 /* .media-element::-webkit-media-controls {
   background-color: #1a1a1a;
 } */
