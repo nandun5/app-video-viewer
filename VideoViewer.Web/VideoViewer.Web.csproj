@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>VideoViewer</RootNamespace>
+    <AssemblyName>VideoViewer.Web</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VideoViewer.Core\VideoViewer.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Build React app before publishing -->
+  <Target Name="BuildClientApp" BeforeTargets="Build">
+    <!-- Use legacy-peer-deps to avoid peer dependency resolution failures on CI/machine configs -->
+    <Exec Command="npm install --legacy-peer-deps" WorkingDirectory="ClientApp" />
+    <Exec Command="npm run build" WorkingDirectory="ClientApp" />
+  </Target>
+
+  <!-- Copy React build output to wwwroot -->
+  <ItemGroup>
+    <DistFiles Include="ClientApp\build\**\*" />
+  </ItemGroup>
+
+  <Target Name="CopyDistFiles" BeforeTargets="Build" AfterTargets="BuildClientApp">
+    <Copy SourceFiles="@(DistFiles)" DestinationFiles="@(DistFiles->'wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
