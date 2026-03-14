@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import './styles.css';
 import { DirectoryContent, FileSystemItem } from '../store/mediaStore';
 
@@ -19,6 +20,7 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   onSelectMedia,
   onGoBack,
 }) => {
+
   if (isLoading) {
     return (
       <div className="directory-browser">
@@ -41,7 +43,8 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
 
   const handleBackClick = () => {
     if (directory.path) {
-      const parentPath = directory.path.substring(0, directory.path.lastIndexOf('/')) || '';
+      const parentPath =
+        directory.path.substring(0, directory.path.lastIndexOf('/')) || '';
       onGoBack();
     }
   };
@@ -53,25 +56,34 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
         {directory.path === '' ? (
           <div className="root-name">Root: {directory.name}</div>
         ) : (
-          <div className="root-name">Root: {directory.name && directory.name}</div>
+          <div className="root-name">Root: {directory.name}</div>
         )}
       </div>
+
       <div className="breadcrumb">
-        {/* Breadcrumb: split path into segments and allow navigation */}
         <button onClick={() => onNavigate('')} className="breadcrumb-item">
           Root
         </button>
-        {directory.path && directory.path.length > 0 && (
-          directory.path.replace(/\\/g, '/').split('/').map((seg, idx, arr) => {
-            const cumulative = arr.slice(0, idx + 1).join('/');
-            return (
-              <React.Fragment key={idx}>
-                <span className="breadcrumb-separator">/</span>
-                <button onClick={() => onNavigate(cumulative)} className="breadcrumb-item">{seg}</button>
-              </React.Fragment>
-            );
-          })
-        )}
+
+        {directory.path &&
+          directory.path.length > 0 &&
+          directory.path
+            .replace(/\\/g, '/')
+            .split('/')
+            .map((seg, idx, arr) => {
+              const cumulative = arr.slice(0, idx + 1).join('/');
+              return (
+                <React.Fragment key={idx}>
+                  <span className="breadcrumb-separator">/</span>
+                  <button
+                    onClick={() => onNavigate(cumulative)}
+                    className="breadcrumb-item"
+                  >
+                    {seg}
+                  </button>
+                </React.Fragment>
+              );
+            })}
       </div>
 
       <div className="items-grid">
@@ -79,7 +91,9 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
           directory.items.map((item) => (
             <div
               key={item.path}
-              className={`item-card ${item.isDirectory ? 'folder' : 'media'}`}
+              className={`item-card ${
+                item.isDirectory ? 'folder' : 'media'
+              }`}
               onClick={() => {
                 if (item.isDirectory) {
                   onNavigate(item.path);
@@ -88,20 +102,14 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
                 }
               }}
             >
-              <div className="item-icon">
-                {item.isDirectory ? (
-                  <FolderIcon />
-                ) : item.mediaType?.startsWith('video/') ? (
-                  <VideoIcon />
-                ) : item.mediaType?.startsWith('image/') ? (
-                  <ImageIcon />
-                ) : (
-                  <FileIcon />
-                )}
-              </div>
+              <ItemIcon item={item} />
+
               <div className="item-name">{item.name}</div>
+
               {item.size && (
-                <div className="item-size">{formatFileSize(item.size)}</div>
+                <div className="item-size">
+                  {formatFileSize(item.size)}
+                </div>
               )}
             </div>
           ))
@@ -109,6 +117,59 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
           <div className="no-items">No items in this directory</div>
         )}
       </div>
+    </div>
+  );
+};
+
+const ItemIcon: React.FC<{ item: FileSystemItem }> = ({ item }) => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // stop observing once visible
+        }
+      },
+      {
+        // threshold: 0.1,
+        // rootMargin: '150px', // preload before visible
+      }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="item-icon">
+      {isVisible && (
+        <>
+          {item.isDirectory ? (
+            <FolderIcon />
+          ) : item.mediaType?.startsWith('video/') ? (
+            item.links?.thumbnail ? (
+              <img
+                src={item.links.thumbnail}
+                loading="lazy"
+                alt={item.name}
+                className="video-thumbnail"
+              />
+            ) : (
+              <VideoIcon />
+            )
+          ) : item.mediaType?.startsWith('image/') ? (
+            <ImageIcon />
+          ) : (
+            <FileIcon />
+          )}
+        </>
+      )}
     </div>
   );
 };
@@ -139,8 +200,15 @@ const FileIcon = () => (
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
+
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
+
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+
+  return (
+    parseFloat((bytes / Math.pow(k, i)).toFixed(2)) +
+    ' ' +
+    sizes[i]
+  );
 }

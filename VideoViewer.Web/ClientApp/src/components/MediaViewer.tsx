@@ -20,10 +20,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const isImage = item.mediaType?.startsWith('image/');
   const mediaUrl = item.links?.stream || mediaApi.getMediaUrl(item.path);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
+      switch (e.code) {
         case 'ArrowRight':
           onNext();
           break;
@@ -32,6 +33,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           break;
         case 'Escape':
           onClose();
+          break;
+        case 'Space':
+          togglePlay();
           break;
         default:
           break;
@@ -67,40 +71,92 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     containerRef.current?.addEventListener('touchend', handleTouchEnd);
   };
 
+  function formatTime(seconds) {
+    if (!seconds || isNaN(seconds)) return "00:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.paused ? video.play() : video.pause();
+  };
   const [showControls, setShowControls] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
   const lastTapRef = useRef(0);
 
   const handleTouch = () => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // ms
-    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // Double tap detected
-      setShowControls((prev) => !prev);
-    }
-    lastTapRef.current = now;
+    togglePlay();
+    // const now = Date.now();
+    // const DOUBLE_TAP_DELAY = 300; // ms
+    // if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+    //   // Double tap detected
+    //   setShowControls((prev) => !prev);
+    // }
+    // lastTapRef.current = now;
   };
 
+  const [btnState, setBtnState] = useState(0); // 0, 1, 2
+
+  const nextBtnState = () => {
+    setBtnState((prev) => (prev + 1) % 3);
+  };
+
+  const onFullscreen = () => {
+    const video = videoRef.current;
+
+    if (!video) return;
+
+    // Safari
+    if (video.webkitEnterFullscreen) {
+      video.webkitEnterFullscreen();
+    } 
+    // Standard fullscreen API
+    else if (video.requestFullscreen) {
+      video.requestFullscreen();
+    } 
+    // IE11
+    else if (video.msRequestFullscreen) {
+      video.msRequestFullscreen();
+    }  
+  };
   return (
     <div
       className="media-viewer fullscreen"
       ref={containerRef}
-      onDoubleClick={onClose}
-      onTouchStart={handleSwipe}
+      // onDoubleClick={onClose}
+      // onTouchStart={handleSwipe} 
     >
       <div className="media-container">
         {isVideo && (
           <video
+            ref={videoRef}
             src={mediaUrl}
             autoPlay
-            controls={showControls}
             playsInline
             preload="metadata"
+            loop={btnState === 0}
+
             // iOS specific attribute to avoid native fullscreen
             webkit-playsinline="true"
             className="media-element"
             onMouseEnter={() => setShowControls(true)}   // desktop hover
             onMouseLeave={() => setShowControls(false)}
-            onTouchEnd={handleTouch} // double-tap to toggle controls
+            onTouchEnd={handleTouch} 
+            onLoadedMetadata={(e) =>
+              setDuration(e.currentTarget.duration)
+            }
+            onTimeUpdate={(e) =>
+              setCurrent(e.currentTarget.currentTime)
+            }
+            onEnded={() => {
+              if (btnState === 1) {
+                onNext();
+              }
+            }}
           />
         )}
         {isImage && (
@@ -116,7 +172,27 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         >
           ←
         </button>
-
+        <button
+          className="control-btn next-btn"
+          onClick={onNext}
+          aria-label="Next media"
+        >
+          →
+        </button>
+        <button
+          className="control-btn"
+          onClick={onFullscreen}
+          aria-label="Fullscreen"
+        >
+          ⛶
+        </button>
+        <button
+          className="control-btn"
+          onClick={nextBtnState}>
+          {btnState === 0 && "↻"}
+          {btnState === 1 && "⏭"}
+          {btnState === 2 && "⏹"}
+        </button>
         <button
           className="control-btn"
           onClick={onClose}
@@ -128,15 +204,17 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         <div className="media-info">
           <h2>{item.name}</h2>
           <p>{item.mediaType}</p>
+          <p>{formatTime(current)} / {formatTime(duration)}</p>
         </div>
 
-        <button
+        <a
+          href={mediaUrl}
+          download={item.name}
           className="control-btn next-btn"
-          onClick={onNext}
-          aria-label="Next media"
+          aria-label="Download video"
         >
-          →
-        </button>
+          ↓
+        </a>
       </div>
     </div>
   );
