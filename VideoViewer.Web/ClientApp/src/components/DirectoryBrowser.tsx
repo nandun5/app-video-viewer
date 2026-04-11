@@ -60,32 +60,6 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
         )}
       </div>
 
-      <div className="breadcrumb">
-        <button onClick={() => onNavigate('')} className="breadcrumb-item">
-          Root
-        </button>
-
-        {directory.path &&
-          directory.path.length > 0 &&
-          directory.path
-            .replace(/\\/g, '/')
-            .split('/')
-            .map((seg, idx, arr) => {
-              const cumulative = arr.slice(0, idx + 1).join('/');
-              return (
-                <React.Fragment key={idx}>
-                  <span className="breadcrumb-separator">/</span>
-                  <button
-                    onClick={() => onNavigate(cumulative)}
-                    className="breadcrumb-item"
-                  >
-                    {seg}
-                  </button>
-                </React.Fragment>
-              );
-            })}
-      </div>
-
       <div className="items-grid">
         {directory.items && directory.items.length > 0 ? (
           directory.items.map((item) => (
@@ -116,6 +90,32 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
         ) : (
           <div className="no-items">No items in this directory</div>
         )}
+      </div>
+
+      <div className="breadcrumb bottom-breadcrumb">
+        <button onClick={() => onNavigate('')} className="breadcrumb-item">
+          Root
+        </button>
+
+        {directory.path &&
+          directory.path.length > 0 &&
+          directory.path
+            .replace(/\\/g, '/')
+            .split('/')
+            .map((seg, idx, arr) => {
+              const cumulative = arr.slice(0, idx + 1).join('/');
+              return (
+                <React.Fragment key={idx}>
+                  <span className="breadcrumb-separator">/</span>
+                  <button
+                    onClick={() => onNavigate(cumulative)}
+                    className="breadcrumb-item"
+                  >
+                    {seg}
+                  </button>
+                </React.Fragment>
+              );
+            })}
       </div>
     </div>
   );
