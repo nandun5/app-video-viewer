@@ -1,4 +1,5 @@
 using Serilog;
+using VideoViewer.Core.DependencyInjection;
 using VideoViewer.Core.Services;
 
 // Configure Serilog
@@ -9,6 +10,12 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Enable Windows Service if running as a service
+if (OperatingSystem.IsWindows())
+{
+    builder.Host.UseWindowsService();
+}
 
 // Bind to all network interfaces so site is reachable via localhost and LAN IPs
 builder.WebHost.UseUrls("http://0.0.0.0:5000");
@@ -33,10 +40,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Register domain services
-builder.Services.AddSingleton<IDirectoryConfigService, DirectoryConfigService>();
-builder.Services.AddScoped<IFileSystemService, FileSystemService>();
-builder.Services.AddScoped<IMediaService, MediaService>();
+builder.Services.AddVideoViewerCore();
 
 var app = builder.Build();
 
@@ -61,6 +65,10 @@ app.MapControllers();
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
     .WithName("Health");
+
+// Serve static files (React build output)
+app.UseDefaultFiles(); // ensures index.html is served by default
+app.UseStaticFiles();
 
 // Fallback to index.html for SPA routing (MUST come before UseStaticFiles so that non-existent paths fall back to SPA)
 app.MapFallbackToFile("index.html");

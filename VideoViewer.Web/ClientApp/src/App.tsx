@@ -33,6 +33,8 @@ function App() {
     let folderPath = pathFromUrl;
     let potentialMediaFile = '';
     
+    console.log('Initial path from URL:', pathFromUrl);
+    console.log('last slash index: ', lastSlashIndex);
     if (lastSlashIndex !== -1) {
       folderPath = pathFromUrl.substring(0, lastSlashIndex);
       potentialMediaFile = pathFromUrl.substring(lastSlashIndex + 1);
@@ -41,9 +43,12 @@ function App() {
       potentialMediaFile = pathFromUrl;
       folderPath = '';
     }
+    console.log('Derived folder path:', folderPath);
+    console.log('Derived potential media file:', potentialMediaFile);
     
     // Set the folder path (not the media file)
     setCurrentPath(folderPath);
+    setCurrentMediaItem(potentialMediaFile)
   }, []);
 
   // After directory loads, check if URL path includes a media file

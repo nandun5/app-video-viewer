@@ -168,6 +168,10 @@ public class FileSystemController : ControllerBase
             {
                 links["thumbnail"] = links["view"];
             }
+            else if (SupportedMediaTypes.IsVideo(item.Path))
+            {
+                links["thumbnail"] = $"/api/thumbnails/{Uri.EscapeDataString(item.Path)}";
+            }
         }
 
         return new FileSystemItemDto
