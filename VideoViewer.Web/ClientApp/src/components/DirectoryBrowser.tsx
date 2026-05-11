@@ -5,21 +5,43 @@ import { DirectoryContent, FileSystemItem } from '../store/mediaStore';
 
 interface DirectoryBrowserProps {
   directory: DirectoryContent | null;
+  browserPath: string;
+  initialScrollTop: number;
+  initialSelectedItemPath: string | null;
   isLoading: boolean;
   error: string | null;
-  onNavigate: (path: string) => void;
-  onSelectMedia: (item: FileSystemItem) => void;
-  onGoBack: () => void;
+  onNavigate: (
+    path: string,
+    sourceBrowserPath: string,
+    selectedChildPath: string | null,
+    scrollTop: number
+  ) => void;
+  onSelectMedia: (
+    item: FileSystemItem,
+    sourceBrowserPath: string,
+    scrollTop: number
+  ) => void;
 }
 
 export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   directory,
+  browserPath,
+  initialScrollTop,
+  initialSelectedItemPath,
   isLoading,
   error,
   onNavigate,
   onSelectMedia,
-  onGoBack,
 }) => {
+  const [selectedItemPath, setSelectedItemPath] = useState<string | null>(initialSelectedItemPath);
+  const itemsGridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setSelectedItemPath(initialSelectedItemPath);
+    if (itemsGridRef.current) {
+      itemsGridRef.current.scrollTop = initialScrollTop;
+    }
+  }, [directory?.path, initialScrollTop, initialSelectedItemPath]);
 
   if (isLoading) {
     return (
@@ -41,14 +63,6 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
     return <div className="directory-browser">No directory selected</div>;
   }
 
-  const handleBackClick = () => {
-    if (directory.path) {
-      const parentPath =
-        directory.path.substring(0, directory.path.lastIndexOf('/')) || '';
-      onGoBack();
-    }
-  };
-
   return (
     <div className="directory-browser">
       <div className="page-header">
@@ -60,19 +74,21 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
         )}
       </div>
 
-      <div className="items-grid">
+      <div className="items-grid" ref={itemsGridRef}>
         {directory.items && directory.items.length > 0 ? (
           directory.items.map((item) => (
             <div
               key={item.path}
-              className={`item-card ${
-                item.isDirectory ? 'folder' : 'media'
+              className={`item-card ${item.isDirectory ? 'folder' : 'media'} ${
+                item.path === selectedItemPath ? 'selected' : ''
               }`}
               onClick={() => {
+                const scrollTop = itemsGridRef.current?.scrollTop ?? 0;
+                setSelectedItemPath(item.path);
                 if (item.isDirectory) {
-                  onNavigate(item.path);
+                  onNavigate(item.path, browserPath, item.path, scrollTop);
                 } else {
-                  onSelectMedia(item);
+                  onSelectMedia(item, browserPath, scrollTop);
                 }
               }}
             >
@@ -80,42 +96,12 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
 
               <div className="item-name">{item.name}</div>
 
-              {item.size && (
-                <div className="item-size">
-                  {formatFileSize(item.size)}
-                </div>
-              )}
+              {item.size && <div className="item-size">{formatFileSize(item.size)}</div>}
             </div>
           ))
         ) : (
           <div className="no-items">No items in this directory</div>
         )}
-      </div>
-
-      <div className="breadcrumb bottom-breadcrumb">
-        <button onClick={() => onNavigate('')} className="breadcrumb-item">
-          Root
-        </button>
-
-        {directory.path &&
-          directory.path.length > 0 &&
-          directory.path
-            .replace(/\\/g, '/')
-            .split('/')
-            .map((seg, idx, arr) => {
-              const cumulative = arr.slice(0, idx + 1).join('/');
-              return (
-                <React.Fragment key={idx}>
-                  <span className="breadcrumb-separator">/</span>
-                  <button
-                    onClick={() => onNavigate(cumulative)}
-                    className="breadcrumb-item"
-                  >
-                    {seg}
-                  </button>
-                </React.Fragment>
-              );
-            })}
       </div>
     </div>
   );

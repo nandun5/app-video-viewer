@@ -1,248 +1,364 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
+import { Breadcrumb } from './components/Breadcrumb';
 import { MediaViewer } from './components/MediaViewer';
-import { useMediaViewerStore, FileSystemItem } from './store/mediaStore';
+import { DirectoryContent, FileSystemItem } from './store/mediaStore';
 import { fileSystemApi } from './api/mediaApi';
 import './App.css';
+
+type BrowserStackEntry = {
+  directory: DirectoryContent;
+  browserPath: string;
+  savedScrollTop: number;
+  selectedItemPath: string | null;
+};
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    currentPath,
-    currentDirectory,
-    currentMediaItem,
-    isLoading,
-    error,
-    setCurrentPath,
-    setCurrentDirectory,
-    setCurrentMediaItem,
-    setIsLoading,
-    setError,
-    goToNextMedia,
-    goToPreviousMedia,
-  } = useMediaViewerStore();
 
-  // Initialize from URL on mount - extract folder and optional media file
-  useEffect(() => {
-    const pathFromUrl = location.pathname === '/' ? '' : location.pathname.slice(1);
-    
-    // Split path into folder and potential media file
-    const lastSlashIndex = pathFromUrl.lastIndexOf('/');
-    let folderPath = pathFromUrl;
-    let potentialMediaFile = '';
-    
-    console.log('Initial path from URL:', pathFromUrl);
-    console.log('last slash index: ', lastSlashIndex);
-    if (lastSlashIndex !== -1) {
-      folderPath = pathFromUrl.substring(0, lastSlashIndex);
-      potentialMediaFile = pathFromUrl.substring(lastSlashIndex + 1);
-    } else if (pathFromUrl && pathFromUrl.includes('.')) {
-      // Single segment with extension - treat as media file in root
-      potentialMediaFile = pathFromUrl;
-      folderPath = '';
+  const [browserStack, setBrowserStack] = useState<BrowserStackEntry[]>([]);
+  const [currentMediaItem, setCurrentMediaItem] = useState<FileSystemItem | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  const currentDirectory = browserStack[browserStack.length - 1]?.directory ?? null;
+  const currentFolderPath = browserStack[browserStack.length - 1]?.browserPath ?? '';
+
+  const normalizePath = (path: string) =>
+    path.replace(/\\/g, '/').replace(/^\/+/g, '').replace(/\/+$/g, '');
+
+  const decodePath = (path: string) => decodeURIComponent(normalizePath(path));
+
+  const encodePath = (path: string) =>
+    normalizePath(path)
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+  const getPathSegments = (path: string) =>
+    normalizePath(path)
+      .split('/')
+      .filter(Boolean);
+
+  const fetchDirectory = async (path: string) => {
+    return await fileSystemApi.getDirectory(path || undefined);
+  };
+
+  const loadDirectoryStack = async (folderPath: string) => {
+    const rootResult = await fetchDirectory('');
+    if (!rootResult || rootResult.type !== 'directory') {
+      throw new Error('Root directory could not be loaded');
     }
-    console.log('Derived folder path:', folderPath);
-    console.log('Derived potential media file:', potentialMediaFile);
-    
-    // Set the folder path (not the media file)
-    setCurrentPath(folderPath);
-    setCurrentMediaItem(potentialMediaFile)
-  }, []);
 
-  // After directory loads, check if URL path includes a media file
-  useEffect(() => {
-    if (currentDirectory && currentDirectory.items.length > 0) {
-      let pathFromUrl = location.pathname === '/' ? '' : location.pathname.slice(1);
-      
-      // Get the last segment of the path
-      const lastSlashIndex = pathFromUrl.lastIndexOf('/');
-      const potentialFileName = lastSlashIndex === -1 ? pathFromUrl : pathFromUrl.substring(lastSlashIndex + 1);
-      const folderPath = lastSlashIndex === -1 ? '' : pathFromUrl.substring(0, lastSlashIndex);
-      
-      // Check if the last segment matches a media file in the current directory
-      if (potentialFileName) {
-        const mediaItem = currentDirectory.items.find(
-          item => item.name === decodeURIComponent(potentialFileName) && !item.isDirectory
-        );
-        
-        if (mediaItem && folderPath === currentPath) {
-          // Fetch full file metadata via API to get all links (parent, previous, next, etc.)
-          loadFileMetadata(pathFromUrl);
-          return;
-        }
+    const rootEntry: BrowserStackEntry = {
+      directory: rootResult.data,
+      browserPath: '',
+      savedScrollTop: 0,
+      selectedItemPath: null,
+    };
+
+    const stack: BrowserStackEntry[] = [rootEntry];
+    let currentPath = '';
+
+    for (const segment of getPathSegments(folderPath)) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      const directoryResult = await fetchDirectory(currentPath);
+      if (!directoryResult || directoryResult.type !== 'directory') {
+        throw new Error(`Directory not found: ${currentPath}`);
       }
-      
-      // If we got here and currently have a media item but path changed, clear it
-      if (currentMediaItem && !pathFromUrl.endsWith(currentMediaItem.name)) {
-        setCurrentMediaItem(null);
-      }
+      stack.push({
+        directory: directoryResult.data,
+        browserPath: normalizePath(directoryResult.data.path),
+        savedScrollTop: 0,
+        selectedItemPath: null,
+      });
     }
-  }, [currentDirectory, location.pathname]);
 
-  // Sync URL pathname when current path changes
-  useEffect(() => {
-    const newPath = currentPath ? `/${currentPath}` : '/';
-    if (location.pathname !== newPath && !currentMediaItem) {
-      console.log('Updating URL to media path from #2');
-      navigate(newPath, { replace: true });
-    }
-  }, [currentPath]);
+    return stack;
+  };
 
-  // Sync URL path when media item changes (include media file in path)
-  useEffect(() => {
-    if (currentMediaItem) {
-      console.log(currentMediaItem);
-      const folderPath = currentPath ? `/${currentPath}` : '';
-      const mediaPath = `${folderPath}/${encodeURIComponent(currentMediaItem.name)}`;
-      console.log('Navigating to media path:', mediaPath);
-      console.log('Current pathname:', location.pathname);
-      if (location.pathname?.trim() !== mediaPath?.trim()) {
-        console.log('Updating URL to media path from #1');
-        navigate(mediaPath, { replace: true });
-      }
-    }
-  }, [currentMediaItem]);
+  const loadInitialStack = async () => {
+    const rawPath = location.pathname === '/' ? '' : location.pathname.slice(1);
+    const decodedPath = decodePath(rawPath);
 
-  // Load directory when path changes
-  useEffect(() => {
-    loadDirectory(currentPath);
-  }, [currentPath]);
+    setIsLoading(true);
+    setError(null);
 
-  const loadDirectory = async (path?: string) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const result = await fileSystemApi.getDirectory(path);
-      if (!result) {
-        if (path) {
-          setCurrentPath('');
-          console.log('Directory not found, going to root');
-          navigate('/', { replace: true });
-        }
-      } else if (result.type === 'directory') {
-        setCurrentDirectory(result.data);
-        setCurrentMediaItem(null);
+      if (!decodedPath) {
+        const stack = await loadDirectoryStack('');
+        setBrowserStack(stack);
+        return;
+      }
+
+      const initialResult = await fetchDirectory(decodedPath);
+      if (!initialResult) {
+        throw new Error('Initial path could not be loaded');
+      }
+
+      if (initialResult.type === 'file') {
+        const parentPath = decodedPath.substring(0, decodedPath.lastIndexOf('/')) || '';
+        const stack = await loadDirectoryStack(parentPath);
+        setBrowserStack(stack);
+        setCurrentMediaItem(initialResult.data);
       } else {
-        // Server returned file metadata for the requested path.
-        const file = result.data;
-        // Load parent directory so UI can show the containing folder
-        const lastSlash = file.path ? file.path.lastIndexOf('/') : -1;
-        const parent = lastSlash >= 0 ? file.path.substring(0, lastSlash) : '';
-        const parentResult = await fileSystemApi.getDirectory(parent || undefined);
-        if (parentResult && parentResult.type === 'directory') {
-          setCurrentDirectory(parentResult.data);
-        } else {
-          setCurrentDirectory(null);
-        }
-        setCurrentMediaItem(file);
+        const stack = await loadDirectoryStack(decodedPath);
+        setBrowserStack(stack);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load directory');
-      setCurrentDirectory(null);
-      // On error, try to go to root if we were in a subfolder
-      if (path) {
-        setCurrentPath('');
-        console.log('Error loading directory, going to root');
-        navigate('/', { replace: true });
+      setError(err instanceof Error ? err.message : 'Failed to load initial path');
+      setBrowserStack([]);
+      setCurrentMediaItem(null);
+    } finally {
+      setIsLoading(false);
+      setInitialized(true);
+    }
+  };
+
+  useEffect(() => {
+    loadInitialStack();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const buildLocationPath = () => {
+    if (currentMediaItem) {
+      const prefix = currentFolderPath ? `/${encodePath(currentFolderPath)}` : '';
+      return `${prefix}/${encodeURIComponent(currentMediaItem.name)}`;
+    }
+
+    return currentFolderPath ? `/${encodePath(currentFolderPath)}` : '/';
+  };
+
+  useEffect(() => {
+    if (!initialized) {
+      return;
+    }
+
+    const targetPath = buildLocationPath();
+    if (location.pathname !== targetPath) {
+      navigate(targetPath, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browserStack, currentMediaItem, initialized]);
+
+  useEffect(() => {
+    if (!initialized) {
+      return;
+    }
+
+    const targetPath = buildLocationPath();
+    if (location.pathname !== targetPath) {
+      loadInitialStack();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const openDirectory = async (path: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await fetchDirectory(normalizePath(path));
+      if (!result || result.type !== 'directory') {
+        throw new Error('Directory not found');
       }
+      setBrowserStack((stack) => [
+        ...stack,
+        {
+          directory: result.data,
+          browserPath: normalizePath(result.data.path),
+          savedScrollTop: 0,
+          selectedItemPath: null,
+        },
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open directory');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadFileMetadata = async (filePath: string) => {
+  const navigateToStackPath = async (path: string) => {
+    const normalizedPath = normalizePath(path);
+    const existingIndex = browserStack.findIndex(
+      (entry) => entry.browserPath === normalizedPath
+    );
+
+    if (existingIndex !== -1) {
+      setBrowserStack((stack) => stack.slice(0, existingIndex + 1));
+      return;
+    }
+
+    await openDirectory(normalizedPath);
+  };
+
+  const openFileFromApiPath = async (decodedFilePath: string) => {
+    setIsLoading(true);
+    setError(null);
+
     try {
-      const result = await fileSystemApi.getDirectory(filePath);
-      if (result && result.type === 'file') {
-        setCurrentMediaItem(result.data);
+      const normalizedFilePath = normalizePath(decodedFilePath);
+      const parentPath = normalizedFilePath.substring(0, normalizedFilePath.lastIndexOf('/')) || '';
+      await navigateToStackPath(parentPath);
+
+      const result = await fetchDirectory(normalizedFilePath);
+      if (!result || result.type !== 'file') {
+        throw new Error('File not found');
       }
+      setCurrentMediaItem(result.data);
     } catch (err) {
-      console.error('Error loading file metadata:', err);
+      setError(err instanceof Error ? err.message : 'Failed to open media item');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleNavigate = (path: string) => {
-    setCurrentMediaItem(null);
-    setCurrentPath(path);
+  const handleNavigate = async (
+    path: string,
+    sourceBrowserPath: string,
+    selectedChildPath: string | null,
+    scrollTop: number
+  ) => {
+    const normalizedPath = normalizePath(path);
+    const normalizedSource = normalizePath(sourceBrowserPath);
+
+    setBrowserStack((stack) =>
+      stack.map((entry) =>
+        entry.browserPath === normalizedSource
+          ? {
+              ...entry,
+              savedScrollTop: scrollTop,
+              selectedItemPath: selectedChildPath,
+            }
+          : entry
+      )
+    );
+
+    if (normalizedPath === normalizePath(currentFolderPath)) {
+      return;
+    }
+
+    await navigateToStackPath(normalizedPath);
   };
 
-  const handleSelectMedia = (item: FileSystemItem) => {
+  const handleSelectMedia = (
+    item: FileSystemItem,
+    sourceBrowserPath: string,
+    scrollTop: number
+  ) => {
+    setBrowserStack((stack) =>
+      stack.map((entry) =>
+        entry.browserPath === normalizePath(sourceBrowserPath)
+          ? {
+              ...entry,
+              savedScrollTop: scrollTop,
+              selectedItemPath: item.path,
+            }
+          : entry
+      )
+    );
     setCurrentMediaItem(item);
   };
 
-  const handleGoBack = () => {
-    if (currentMediaItem) {
-      setCurrentMediaItem(null);
-    } else if (currentPath) {
-      const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '';
-      handleNavigate(parentPath);
+  const handleBreadcrumbNavigate = async (path: string) => {
+    await navigateToStackPath(path);
+    setCurrentMediaItem(null);
+  };
+
+  const handleCloseMedia = () => {
+    setCurrentMediaItem(null);
+  };
+
+  const handleNextMedia = async () => {
+    if (!currentMediaItem) {
+      return;
+    }
+
+    const nextLink = currentMediaItem.links?.next;
+    if (nextLink) {
+      await navigateToFileLink(nextLink);
+      return;
+    }
+
+    if (currentDirectory) {
+      const mediaFiles = currentDirectory.items.filter((item) => !item.isDirectory);
+      const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
+      if (index >= 0 && index < mediaFiles.length - 1) {
+        setCurrentMediaItem(mediaFiles[index + 1]);
+      }
     }
   };
 
-  // Navigate to a file link returned by the API (e.g. "/api/filesystem/path%2Fto%2Ffile.mp4")
-  function navigateToFileLink(apiLink: string) {
-    console.log('Navigating to file link:', apiLink);
-    const prefix = '/api/filesystem/';
-    let encoded = apiLink;
-    if (apiLink.startsWith(prefix)) {
-      encoded = apiLink.substring(prefix.length);
+  const handlePreviousMedia = async () => {
+    if (!currentMediaItem) {
+      return;
     }
+
+    const prevLink = currentMediaItem.links?.previous;
+    if (prevLink) {
+      await navigateToFileLink(prevLink);
+      return;
+    }
+
+    if (currentDirectory) {
+      const mediaFiles = currentDirectory.items.filter((item) => !item.isDirectory);
+      const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
+      if (index > 0) {
+        setCurrentMediaItem(mediaFiles[index - 1]);
+      }
+    }
+  };
+
+  const navigateToFileLink = async (apiLink: string) => {
+    const prefix = '/api/filesystem/';
+    const encoded = apiLink.startsWith(prefix) ? apiLink.substring(prefix.length) : apiLink;
     const decoded = decodeURIComponent(encoded);
-    const segments = decoded.split('/').map(s => encodeURIComponent(s)).join('/');
-    // Navigate to client route which will trigger loading and opening the file
-    console.log('Updating URL to media path from #3');
-    navigate(`/${segments}`);
-  }
+    await openFileFromApiPath(decoded);
+  };
 
   return (
     <div className="app-container">
+      <div className="browser-stack">
+        {browserStack.map((entry, index) => (
+          <div
+            key={entry.browserPath || 'root'}
+            className="directory-browser-layer"
+            style={{ zIndex: index }}
+          >
+            <DirectoryBrowser
+              directory={entry.directory}
+              browserPath={entry.browserPath}
+              initialScrollTop={entry.savedScrollTop}
+              initialSelectedItemPath={entry.selectedItemPath}
+              isLoading={isLoading && index === browserStack.length - 1}
+              error={index === browserStack.length - 1 ? error : null}
+              onNavigate={handleNavigate}
+              onSelectMedia={handleSelectMedia}
+            />
+          </div>
+        ))}
+      </div>
+
+      {!currentMediaItem && browserStack.length > 0 && (
+        <Breadcrumb
+          stack={browserStack.map((entry) => ({
+            browserPath: entry.browserPath,
+            name: entry.directory.name,
+          }))}
+          onNavigate={handleBreadcrumbNavigate}
+        />
+      )}
+
       {currentMediaItem && (
         <MediaViewer
           item={currentMediaItem}
-          onNext={() => {
-            const nextLink = currentMediaItem?.links?.next;
-            if (nextLink) {
-              navigateToFileLink(nextLink);
-            } else {
-              goToNextMedia();
-            }
-          }}
-          onPrevious={() => {
-            const prevLink = currentMediaItem?.links?.previous;
-            if (prevLink) {
-              navigateToFileLink(prevLink);
-            } else {
-              goToPreviousMedia();
-            }
-          }}
-          onClose={() => {
-            // If API provided a parent link, navigate to it; otherwise just close viewer
-            const parentLink = currentMediaItem?.links?.parent;
-            if (parentLink) {
-              // parentLink is like /api/filesystem/{encodedPath}
-              const prefix = '/api/filesystem/';
-              if (parentLink.startsWith(prefix)) {
-                const encoded = parentLink.substring(prefix.length);
-                const decoded = decodeURIComponent(encoded);
-                setCurrentMediaItem(null);
-                setCurrentPath(decoded);
-                return;
-              }
-            }
-            setCurrentMediaItem(null);
-          }}
-        />
-      )}
-      {!currentMediaItem && (
-        <DirectoryBrowser
-          directory={currentDirectory}
-          isLoading={isLoading}
-          error={error}
-          onNavigate={handleNavigate}
-          onSelectMedia={handleSelectMedia}
-          onGoBack={handleGoBack}
+          onNext={handleNextMedia}
+          onPrevious={handlePreviousMedia}
+          onClose={handleCloseMedia}
         />
       )}
     </div>

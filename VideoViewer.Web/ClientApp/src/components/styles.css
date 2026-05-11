@@ -30,9 +30,22 @@ body {
 .directory-browser {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   height: 100%;
   padding: var(--spacing-unit);
   gap: var(--spacing-unit);
+  position: relative;
+}
+
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: calc(var(--spacing-unit) * 2);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-unit);
+  touch-action: auto;
 }
 
 .breadcrumb {
@@ -140,6 +153,11 @@ body {
   background-color: #1a1a1a;
   border-color: var(--color-primary);
   transform: scale(1.05);
+}
+
+.item-card.selected {
+  border-color: var(--color-primary);
+  background-color: #121212;
 }
 
 .item-card.folder {
