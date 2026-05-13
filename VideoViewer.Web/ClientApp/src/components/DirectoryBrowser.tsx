@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 
 import './styles.css';
 import { DirectoryContent, FileSystemItem } from '../store/mediaStore';
@@ -34,6 +34,7 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   onSelectMedia,
 }) => {
   const [selectedItemPath, setSelectedItemPath] = useState<string | null>(initialSelectedItemPath);
+  const [sortType, setSortType] = useState<number>(0); // 0: name asc, 1: name desc, 2: date asc, 3: date desc
   const itemsGridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -42,6 +43,33 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
       itemsGridRef.current.scrollTop = initialScrollTop;
     }
   }, [directory?.path, initialScrollTop, initialSelectedItemPath]);
+
+  const sortedItems = useMemo(() => {
+    if (!directory?.items) return [];
+    
+    return [...directory.items].sort((a, b) => {
+      // Directories always come first
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      
+      switch (sortType) {
+        case 0: // Name ascending
+          return a.name.localeCompare(b.name);
+        case 1: // Name descending
+          return b.name.localeCompare(a.name);
+        case 2: // Date ascending
+          return new Date(a.modified).getTime() - new Date(b.modified).getTime();
+        case 3: // Date descending
+          return new Date(b.modified).getTime() - new Date(a.modified).getTime();
+        default:
+          return 0;
+      }
+    });
+  }, [directory?.items, sortType]);
+
+  const handleSortToggle = () => {
+    setSortType((prev) => (prev + 1) % 4);
+  };
 
   if (isLoading) {
     return (
@@ -67,6 +95,9 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
     <div className="directory-browser">
       <div className="page-header">
         <h1 className="page-title">Video Viewer</h1>
+        <button className="sort-button" onClick={handleSortToggle} title="Toggle sort order">
+          <SortIcon sortType={sortType} />
+        </button>
         {directory.path === '' ? (
           <div className="root-name">Root: {directory.name}</div>
         ) : (
@@ -75,8 +106,8 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
       </div>
 
       <div className="items-grid" ref={itemsGridRef}>
-        {directory.items && directory.items.length > 0 ? (
-          directory.items.map((item) => (
+        {sortedItems && sortedItems.length > 0 ? (
+          sortedItems.map((item) => (
             <div
               key={item.path}
               className={`item-card ${item.isDirectory ? 'folder' : 'media'} ${
@@ -183,6 +214,27 @@ const FileIcon = () => (
     <path d="M14 2H6c-1.1 0-1.99.9-1.99 2v16c0 1.1.89 2 1.99 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 16H7v-2h6v2zm3-4H7v-2h9v2z" />
   </svg>
 );
+
+const SortIcon: React.FC<{ sortType: number }> = ({ sortType }) => {
+  const getSortLabel = () => {
+    switch (sortType) {
+      case 0: return 'Name ↑';
+      case 1: return 'Name ↓';
+      case 2: return 'Date ↑';
+      case 3: return 'Date ↓';
+      default: return 'Sort';
+    }
+  };
+
+  return (
+    <div className="sort-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" />
+      </svg>
+      <span className="sort-label">{getSortLabel()}</span>
+    </div>
+  );
+};
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
