@@ -169,19 +169,19 @@ const ItemIcon: React.FC<{ item: FileSystemItem }> = ({ item }) => {
         <>
           {item.isDirectory ? (
             <FolderIcon />
-          ) : item.mediaType?.startsWith('video/') ? (
+          ) : item.mediaType?.startsWith('video/') || item.mediaType?.startsWith('image/') ? (
             item.links?.thumbnail ? (
               <img
                 src={item.links.thumbnail}
                 loading="lazy"
                 alt={item.name}
-                className="video-thumbnail"
+                className={item.mediaType?.startsWith('video/') ? "video-thumbnail" : "image-thumbnail"}
               />
-            ) : (
+            ) : item.mediaType?.startsWith('video/') ? (
               <VideoIcon />
+            ) : (
+              <ImageIcon />
             )
-          ) : item.mediaType?.startsWith('image/') ? (
-            <ImageIcon />
           ) : (
             <FileIcon />
           )}

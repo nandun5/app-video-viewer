@@ -376,6 +376,13 @@ body {
   border-radius: 4px; /* optional rounded corners */
 }
 
+.image-thumbnail {
+  width: 48px;   /* or match your icon size */
+  height: 48px;
+  object-fit: cover; /* crop to fit nicely */
+  border-radius: 4px; /* optional rounded corners */
+}
+
 /* Responsive Design */
 @media (max-width: 480px) {
   /* .items-grid {
