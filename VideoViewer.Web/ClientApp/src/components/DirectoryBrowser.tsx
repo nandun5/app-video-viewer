@@ -34,7 +34,19 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   onSelectMedia,
 }) => {
   const [selectedItemPath, setSelectedItemPath] = useState<string | null>(initialSelectedItemPath);
-  const [sortType, setSortType] = useState<number>(0); // 0: name asc, 1: name desc, 2: date asc, 3: date desc
+  const [sortType, setSortType] = useState<number>(() => {
+    if (typeof window === 'undefined') {
+      return 3; // default to date descending
+    }
+
+    try {
+      const saved = window.localStorage.getItem(`video-viewer-sort:${browserPath || 'root'}`);
+      const parsed = saved ? parseInt(saved, 10) : NaN;
+      return Number.isInteger(parsed) ? parsed : 3;
+    } catch {
+      return 3;
+    }
+  });
   const itemsGridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -43,6 +55,36 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
       itemsGridRef.current.scrollTop = initialScrollTop;
     }
   }, [directory?.path, initialScrollTop, initialSelectedItemPath]);
+
+  useEffect(() => {
+    if (!directory) {
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem(`video-viewer-sort:${browserPath || 'root'}`);
+      const parsed = saved ? parseInt(saved, 10) : NaN;
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 3) {
+        setSortType(parsed);
+      } else {
+        setSortType(3);
+      }
+    } catch {
+      setSortType(3);
+    }
+  }, [browserPath, directory]);
+
+  useEffect(() => {
+    if (!directory) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(`video-viewer-sort:${browserPath || 'root'}`, sortType.toString());
+    } catch {
+      // ignore storage errors
+    }
+  }, [browserPath, directory, sortType]);
 
   const sortedItems = useMemo(() => {
     if (!directory?.items) return [];
