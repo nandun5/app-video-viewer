@@ -1,6 +1,8 @@
 using Serilog;
 using VideoViewer.Core.DependencyInjection;
 using VideoViewer.Core.Services;
+using VideoViewer.Web.Hubs;
+using VideoViewer.Web.Services;
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -42,6 +44,11 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddVideoViewerCore();
 
+// Add SignalR for server push notifications
+builder.Services.AddSignalR();
+// Background service that watches the configured directory and broadcasts changes
+builder.Services.AddHostedService<DirectoryWatcher>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -61,6 +68,9 @@ app.UseCors(policy =>
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Map SignalR hub for directory change notifications
+app.MapHub<DirectoryHub>("/hubs/directory");
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))

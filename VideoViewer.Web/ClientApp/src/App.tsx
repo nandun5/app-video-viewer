@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as signalR from '@microsoft/signalr';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Breadcrumb } from './components/Breadcrumb';
@@ -44,9 +45,9 @@ function App() {
       .split('/')
       .filter(Boolean);
 
-  const fetchDirectory = async (path: string) => {
+  const fetchDirectory = React.useCallback(async (path: string) => {
     return await fileSystemApi.getDirectory(path || undefined);
-  };
+  }, []);
 
   const loadDirectoryStack = async (folderPath: string) => {
     const rootResult = await fetchDirectory('');
@@ -156,6 +157,60 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!initialized || browserStack.length === 0) {
+      return;
+    }
+
+    const currentFolderPath = browserStack[browserStack.length - 1].browserPath;
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/hubs/directory')
+      .withAutomaticReconnect()
+      .build();
+
+    let mounted = true;
+
+    const start = async () => {
+      try {
+        await connection.start();
+        connection.on('DirectoryChanged', async (relativePath: string) => {
+          // Only refresh if change is relevant to the currently visible folder
+          if (!mounted) return;
+
+          try {
+            const result = await fetchDirectory(currentFolderPath);
+            if (result?.type === 'directory') {
+              setBrowserStack((stack) => {
+                if (stack.length === 0) return stack;
+                const lastEntry = stack[stack.length - 1];
+                if (lastEntry.browserPath !== currentFolderPath) return stack;
+                return [
+                  ...stack.slice(0, stack.length - 1),
+                  {
+                    ...lastEntry,
+                    directory: result.data,
+                  },
+                ];
+              });
+            }
+          } catch (err) {
+            console.debug('Directory refresh (SignalR) failed:', err);
+          }
+        });
+      } catch (err) {
+        console.debug('SignalR connection failed:', err);
+      }
+    };
+
+    start();
+
+    return () => {
+      mounted = false;
+      connection.stop().catch(() => {});
+    };
+  }, [initialized, browserStack, fetchDirectory]);
 
   const openDirectory = async (path: string) => {
     setIsLoading(true);
