@@ -2,6 +2,7 @@ namespace VideoViewer.Core.Services;
 
 using Microsoft.Extensions.Logging;
 using System.Net;
+using VideoViewer.Core.Models;
 
 public interface IThumbnailService
 {
@@ -30,19 +31,35 @@ public class ThumbnailService : IThumbnailService
         // Prevent absolute path segments that would escape root
         decoded = decoded.TrimStart(Path.DirectorySeparatorChar);
 
-        var fullPath =  Path.Combine(rootDir, decoded);
+        var fullPath = Path.Combine(rootDir, decoded);
 
         return Path.GetFullPath(fullPath);
+    }
+
+    private static bool IsSupportedMediaPath(string relativeMediaPath)
+    {
+        return SupportedMediaTypes.IsMediaFile(relativeMediaPath);
+    }
+
+    private string GetThumbnailOutputPath(string relativeMediaPath)
+    {
+        var relativeThumbnailPath = relativeMediaPath + ".webp";
+        var thumbnailsRoot = Path.Combine(_directoryConfig.GetRootDirectory(), "_thumbnails");
+
+        return GetFullResolvedDecodedPath(relativeThumbnailPath, thumbnailsRoot);
     }
 
     public async Task<Stream> GetThumbnailAsync(string relativeMediaPath)
     {
         try
         {
-            var relativeThumbnailPath = relativeMediaPath + ".webp";
+            if (string.IsNullOrWhiteSpace(relativeMediaPath) || !IsSupportedMediaPath(relativeMediaPath))
+            {
+                throw new NotSupportedException("Thumbnail generation is only supported for image and video files.");
+            }
 
             var resolvedMediaPath = GetFullResolvedDecodedPath(relativeMediaPath, _directoryConfig.GetRootDirectory());
-            var resolvedThumbnailPath = GetFullResolvedDecodedPath(relativeThumbnailPath, _directoryConfig.GetRootDirectory() + Path.DirectorySeparatorChar + "_thumbnails");
+            var resolvedThumbnailPath = GetThumbnailOutputPath(relativeMediaPath);
 
             if (!File.Exists(resolvedThumbnailPath))
             {

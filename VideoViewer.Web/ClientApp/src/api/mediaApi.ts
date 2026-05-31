@@ -92,7 +92,7 @@ export const mediaApi = {
   },
 
   getThumbnailUrl: (path: string): string => {
-    return `/api/media/stream/${encodePath(path)}`;
+    return `/api/thumbnails/${encodePath(path)}`;
   },
 
   getMediaInfo: async (path: string) => {

@@ -57,12 +57,7 @@ public class FileSystemController : ControllerBase
                 }
 
                 // Build links: self, root, parent, stream, previous, next
-                var links = new Dictionary<string, string>
-                {
-                    { "self", $"/api/filesystem/{Uri.EscapeDataString(path ?? string.Empty)}" },
-                    { "root", "/api/filesystem" },
-                    { "stream", $"/api/media/stream/{Uri.EscapeDataString(path ?? string.Empty)}" }
-                };
+                var links = CreateMediaLinks(path ?? string.Empty);
 
                 // Parent folder
                 var parent = string.Empty;
@@ -163,15 +158,7 @@ public class FileSystemController : ControllerBase
         }
         else
         {
-            links["view"] = $"/api/media/stream/{Uri.EscapeDataString(item.Path)}";
-            if (SupportedMediaTypes.IsImage(item.Path))
-            {
-                links["thumbnail"] = links["view"];
-            }
-            else if (SupportedMediaTypes.IsVideo(item.Path))
-            {
-                links["thumbnail"] = $"/api/thumbnails/{Uri.EscapeDataString(item.Path)}";
-            }
+            links = CreateMediaLinks(item.Path);
         }
 
         return new FileSystemItemDto
@@ -184,6 +171,24 @@ public class FileSystemController : ControllerBase
             Modified = item.Modified,
             Links = links
         };
+    }
+
+    private Dictionary<string, string> CreateMediaLinks(string path)
+    {
+        var links = new Dictionary<string, string>
+        {
+            { "self", $"/api/filesystem/{Uri.EscapeDataString(path)}" },
+            { "root", "/api/filesystem" },
+            { "view", $"/api/media/stream/{Uri.EscapeDataString(path)}" },
+            { "stream", $"/api/media/stream/{Uri.EscapeDataString(path)}" }
+        };
+
+        if (SupportedMediaTypes.IsImage(path) || SupportedMediaTypes.IsVideo(path))
+        {
+            links["thumbnail"] = $"/api/thumbnails/{Uri.EscapeDataString(path)}";
+        }
+
+        return links;
     }
 }
 
