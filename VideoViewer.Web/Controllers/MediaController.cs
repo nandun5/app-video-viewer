@@ -1,5 +1,6 @@
 namespace VideoViewer.Controllers;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Net;
@@ -10,6 +11,7 @@ using VideoViewer.Core.Services;
 /// Route format: /api/media/stream/{**path} - path segments are decoded into file path
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/[controller]/stream")]
 public class MediaController : ControllerBase
 {

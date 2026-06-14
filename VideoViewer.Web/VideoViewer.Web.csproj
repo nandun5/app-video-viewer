@@ -11,6 +11,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
   </ItemGroup>
@@ -20,7 +22,7 @@
   </ItemGroup>
 
   <!-- Build React app before publishing -->
-  <Target Name="BuildClientApp" BeforeTargets="Build">
+  <Target Name="BuildClientApp" BeforeTargets="Build" Condition="'$(SkipClientBuild)' != 'true'">
     <!-- Use legacy-peer-deps to avoid peer dependency resolution failures on CI/machine configs -->
     <Exec Command="npm install --legacy-peer-deps" WorkingDirectory="ClientApp" />
     <Exec Command="npm run build" WorkingDirectory="ClientApp" />
@@ -31,7 +33,7 @@
     <DistFiles Include="ClientApp\build\**\*" />
   </ItemGroup>
 
-  <Target Name="CopyDistFiles" BeforeTargets="Build" AfterTargets="BuildClientApp">
+  <Target Name="CopyDistFiles" BeforeTargets="Build" AfterTargets="BuildClientApp" Condition="'$(SkipClientBuild)' != 'true'">
     <Copy SourceFiles="@(DistFiles)" DestinationFiles="@(DistFiles->'wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 

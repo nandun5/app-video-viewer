@@ -1,4 +1,8 @@
 using Serilog;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using VideoViewer.Core.DependencyInjection;
 using VideoViewer.Core.Services;
 using VideoViewer.Web.Hubs;
@@ -13,6 +17,10 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load environment variables explicitly so auth values can be supplied via
+// VideoViewer__Auth__Pin and VideoViewer__Auth__JwtSecret.
+builder.Configuration.AddEnvironmentVariables();
+
 // Enable Windows Service if running as a service
 if (OperatingSystem.IsWindows())
 {
@@ -26,6 +34,55 @@ builder.WebHost.UseUrls("http://0.0.0.0:5000");
 builder.Services.AddLogging(config => config.AddSerilog());
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+var authConfig = new AuthConfig
+{
+    Pin = Environment.GetEnvironmentVariable("VideoViewer__Auth__Pin") ?? string.Empty,
+    JwtSecret = Environment.GetEnvironmentVariable("VideoViewer__Auth__JwtSecret") ?? string.Empty,
+    TokenLifetimeMinutes = int.TryParse(Environment.GetEnvironmentVariable("VideoViewer__Auth__TokenLifetimeMinutes"), out var ttl) ? ttl : 60
+};
+
+if (string.IsNullOrWhiteSpace(authConfig.Pin) || string.IsNullOrWhiteSpace(authConfig.JwtSecret))
+{
+    throw new InvalidOperationException("VideoViewer auth configuration is missing. Please configure VideoViewer__Auth__Pin and VideoViewer__Auth__JwtSecret environment variables.");
+}
+
+builder.Services.AddSingleton<IOptions<AuthConfig>>(Options.Create(authConfig));
+builder.Services.AddSingleton<IPinAuthService, PinAuthService>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authConfig.JwtSecret)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (context.Request.Query.TryGetValue("access_token", out var accessToken) && !string.IsNullOrEmpty(accessToken))
+                {
+                    context.Token = accessToken;
+                }
+                else if (context.Request.Cookies.TryGetValue("VideoViewerAuthToken", out var cookieToken) && !string.IsNullOrEmpty(cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Configure CORS for React frontend (allow local origins / LAN access)
 builder.Services.AddCors(options =>
@@ -61,10 +118,12 @@ if (app.Environment.IsDevelopment())
 // app.UseCors("ReactApp");
 app.UseCors(policy => 
     policy
-        .WithOrigins("*") // or "*" for all
+        .SetIsOriginAllowed(_ => true)
         .AllowAnyMethod()
         .AllowAnyHeader()
+        .AllowCredentials()
 );
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

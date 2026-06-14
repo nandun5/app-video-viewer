@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Breadcrumb } from './components/Breadcrumb';
 import { MediaViewer } from './components/MediaViewer';
 import { DirectoryContent, FileSystemItem } from './store/mediaStore';
-import { fileSystemApi } from './api/mediaApi';
+import { fileSystemApi, setPinPromptHandler } from './api/mediaApi';
 import './App.css';
 
 type BrowserStackEntry = {
@@ -24,6 +24,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const pinPromptResolver = useRef<((pin: string) => void) | null>(null);
 
   const currentDirectory = browserStack[browserStack.length - 1]?.directory ?? null;
   const currentFolderPath = browserStack[browserStack.length - 1]?.browserPath ?? '';
@@ -119,6 +123,21 @@ function App() {
       setInitialized(true);
     }
   };
+
+  useEffect(() => {
+    setPinPromptHandler(async (errorMessage) => {
+      return new Promise<string>((resolve) => {
+        pinPromptResolver.current = resolve;
+        setPinError(errorMessage ?? null);
+        setPinEntry('');
+        setPinDialogOpen(true);
+      });
+    });
+
+    return () => {
+      setPinPromptHandler(null);
+    };
+  }, []);
 
   useEffect(() => {
     loadInitialStack();
@@ -328,6 +347,36 @@ function App() {
     setCurrentMediaItem(null);
   };
 
+  const handlePinDigit = (digit: string) => {
+    if (pinEntry.length >= 6) return;
+
+    setPinEntry((prev) => {
+      const nextPin = prev + digit;
+      if (nextPin.length === 6) {
+        setPinDialogOpen(false);
+        pinPromptResolver.current?.(nextPin);
+        pinPromptResolver.current = null;
+      }
+      return nextPin;
+    });
+  };
+
+  const handlePinDelete = () => {
+    setPinEntry((prev) => prev.slice(0, -1));
+  };
+
+  const handlePinClear = () => {
+    setPinEntry('');
+    setPinError(null);
+  };
+
+  const handlePinCancel = () => {
+    setPinDialogOpen(false);
+    setPinError(null);
+    pinPromptResolver.current?.('');
+    pinPromptResolver.current = null;
+  };
+
   const handleNextMedia = async () => {
     if (!currentMediaItem) {
       return;
@@ -398,6 +447,18 @@ function App() {
         ))}
       </div>
 
+      {browserStack.length === 0 && isLoading && (
+        <div className="app-fallback">
+          <div className="app-fallback-message">Loading...</div>
+        </div>
+      )}
+
+      {browserStack.length === 0 && !isLoading && error && (
+        <div className="app-fallback">
+          <div className="app-fallback-message">Error: {error}</div>
+        </div>
+      )}
+
       {!currentMediaItem && browserStack.length > 0 && (
         <Breadcrumb
           stack={browserStack.map((entry) => ({
@@ -415,6 +476,37 @@ function App() {
           onPrevious={handlePreviousMedia}
           onClose={handleCloseMedia}
         />
+      )}
+
+      {pinDialogOpen && (
+        <div className="pin-dialog-overlay">
+          <div className="pin-dialog">
+            <h2>Enter 6-digit PIN</h2>
+            <div className="pin-display">{pinEntry.padEnd(6, '•')}</div>
+            {pinError && <div className="pin-error">{pinError}</div>}
+
+            <div className="pin-keypad">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
+                <button key={digit} onClick={() => handlePinDigit(digit.toString())}>
+                  {digit}
+                </button>
+              ))}
+              <button className="pin-action" onClick={handlePinDelete}>
+                Del
+              </button>
+              <button onClick={() => handlePinDigit('0')}>0</button>
+              <button className="pin-action" onClick={handlePinClear}>
+                Clear
+              </button>
+            </div>
+
+            <div className="pin-actions">
+              <button className="pin-cancel" onClick={handlePinCancel}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

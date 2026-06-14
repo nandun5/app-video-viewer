@@ -1,5 +1,6 @@
 namespace VideoViewer.Controllers;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Linq;
@@ -11,6 +12,7 @@ using VideoViewer.Core.Services;
 /// Route format: /api/filesystem/{**path} - path segments are decoded into folder/file path
 /// </summary>
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class FileSystemController : ControllerBase
 {
