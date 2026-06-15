@@ -21,6 +21,7 @@ interface DirectoryBrowserProps {
     sourceBrowserPath: string,
     scrollTop: number
   ) => void;
+  onSortedMediaChange: (sortedMedia: FileSystemItem[]) => void;
 }
 
 export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
@@ -32,6 +33,7 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
   error,
   onNavigate,
   onSelectMedia,
+  onSortedMediaChange,
 }) => {
   const [selectedItemPath, setSelectedItemPath] = useState<string | null>(initialSelectedItemPath);
   const [sortType, setSortType] = useState<number>(() => {
@@ -108,6 +110,11 @@ export const DirectoryBrowser: React.FC<DirectoryBrowserProps> = ({
       }
     });
   }, [directory?.items, sortType]);
+
+  useEffect(() => {
+    const sortedMedia = sortedItems.filter((item) => !item.isDirectory);
+    onSortedMediaChange(sortedMedia);
+  }, [onSortedMediaChange, sortedItems]);
 
   const handleSortToggle = () => {
     setSortType((prev) => (prev + 1) % 4);

@@ -31,6 +31,7 @@ function App() {
 
   const currentDirectory = browserStack[browserStack.length - 1]?.directory ?? null;
   const currentFolderPath = browserStack[browserStack.length - 1]?.browserPath ?? '';
+  const [currentSortedMediaItems, setCurrentSortedMediaItems] = useState<FileSystemItem[]>([]);
 
   const normalizePath = (path: string) =>
     path.replace(/\\/g, '/').replace(/^\/+/g, '').replace(/\/+$/g, '');
@@ -377,43 +378,33 @@ function App() {
     pinPromptResolver.current = null;
   };
 
-  const handleNextMedia = async () => {
+  const handleNextMedia = () => {
     if (!currentMediaItem) {
       return;
     }
 
-    const nextLink = currentMediaItem.links?.next;
-    if (nextLink) {
-      await navigateToFileLink(nextLink);
-      return;
-    }
+    const mediaFiles = currentSortedMediaItems.length
+      ? currentSortedMediaItems
+      : currentDirectory?.items.filter((item) => !item.isDirectory) ?? [];
 
-    if (currentDirectory) {
-      const mediaFiles = currentDirectory.items.filter((item) => !item.isDirectory);
-      const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
-      if (index >= 0 && index < mediaFiles.length - 1) {
-        setCurrentMediaItem(mediaFiles[index + 1]);
-      }
+    const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
+    if (index >= 0 && index < mediaFiles.length - 1) {
+      setCurrentMediaItem(mediaFiles[index + 1]);
     }
   };
 
-  const handlePreviousMedia = async () => {
+  const handlePreviousMedia = () => {
     if (!currentMediaItem) {
       return;
     }
 
-    const prevLink = currentMediaItem.links?.previous;
-    if (prevLink) {
-      await navigateToFileLink(prevLink);
-      return;
-    }
+    const mediaFiles = currentSortedMediaItems.length
+      ? currentSortedMediaItems
+      : currentDirectory?.items.filter((item) => !item.isDirectory) ?? [];
 
-    if (currentDirectory) {
-      const mediaFiles = currentDirectory.items.filter((item) => !item.isDirectory);
-      const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
-      if (index > 0) {
-        setCurrentMediaItem(mediaFiles[index - 1]);
-      }
+    const index = mediaFiles.findIndex((item) => item.path === currentMediaItem.path);
+    if (index > 0) {
+      setCurrentMediaItem(mediaFiles[index - 1]);
     }
   };
 
@@ -442,6 +433,7 @@ function App() {
               error={index === browserStack.length - 1 ? error : null}
               onNavigate={handleNavigate}
               onSelectMedia={handleSelectMedia}
+              onSortedMediaChange={setCurrentSortedMediaItems}
             />
           </div>
         ))}
