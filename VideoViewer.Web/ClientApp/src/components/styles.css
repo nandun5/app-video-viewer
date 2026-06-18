@@ -273,12 +273,37 @@ body {
   position: relative;
 }
 
+.image-zoom-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .media-element {
   max-width: 100%;
   max-height: 100%;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.media-element.image-zoomable {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  will-change: transform;
+  cursor: grab;
+}
+
+.media-element.image-zoomable:active {
+  cursor: grabbing;
 }
 
 .media-element.controls-visible {

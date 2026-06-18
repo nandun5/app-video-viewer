@@ -20,7 +20,116 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const isImage = item.mediaType?.startsWith('image/');
   const mediaUrl = item.links?.stream || mediaApi.getMediaUrl(item.path);
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const lastTapRef = useRef<number>(0);
+  const panStartRef = useRef({ pointerId: 0, startX: 0, startY: 0, originX: 0, originY: 0 });
+
+  const [zoomScale, setZoomScale] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+
+  useEffect(() => {
+    setZoomScale(1);
+    setPanX(0);
+    setPanY(0);
+    setIsZoomed(false);
+    setIsPanning(false);
+  }, [item]);
+
+  const getZoomScale = () => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return 1;
+
+    const containerRect = container.getBoundingClientRect();
+    const imageWidth = img.clientWidth;
+    const imageHeight = img.clientHeight;
+    if (imageWidth === 0 || imageHeight === 0) return 1;
+
+    const isLandscape = imageWidth >= imageHeight;
+    const scale = isLandscape
+      ? containerRect.height / imageHeight
+      : containerRect.width / imageWidth;
+
+    return Math.max(1, Number(scale.toFixed(2)));
+  };
+
+  const resetZoom = () => {
+    setZoomScale(1);
+    setPanX(0);
+    setPanY(0);
+    setIsZoomed(false);
+  };
+
+  const clampPan = (x: number, y: number) => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return { x, y };
+
+    const maxX = Math.max(0, (img.clientWidth * zoomScale - container.clientWidth) / 2);
+    const maxY = Math.max(0, (img.clientHeight * zoomScale - container.clientHeight) / 2);
+
+    return {
+      x: Math.min(Math.max(x, -maxX), maxX),
+      y: Math.min(Math.max(y, -maxY), maxY),
+    };
+  };
+
+  const handleImagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isZoomed) return;
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsPanning(true);
+    panStartRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: panX,
+      originY: panY,
+    };
+  };
+
+  const handleImagePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPanning || panStartRef.current.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - panStartRef.current.startX;
+    const dy = e.clientY - panStartRef.current.startY;
+    const nextX = panStartRef.current.originX + dx;
+    const nextY = panStartRef.current.originY + dy;
+    const clamped = clampPan(nextX, nextY);
+
+    setPanX(clamped.x);
+    setPanY(clamped.y);
+  };
+
+  const handleImagePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (panStartRef.current.pointerId !== e.pointerId) return;
+    setIsPanning(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handleImageTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const now = Date.now();
+    const elapsed = now - lastTapRef.current;
+    lastTapRef.current = now;
+
+    if (elapsed < 300) {
+      e.preventDefault();
+      if (isZoomed) {
+        resetZoom();
+      } else {
+        const zoom = getZoomScale();
+        setZoomScale(zoom);
+        setPanX(0);
+        setPanY(0);
+        setIsZoomed(true);
+      }
+      lastTapRef.current = 0;
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,31 +155,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onNext, onPrevious, onClose]);
 
-  const handleSwipe = (e: React.TouchEvent) => {
-    if (!containerRef.current) return;
-
-    const touch = e.touches[0];
-    const startX = touch.clientX;
-
-    const handleTouchEnd = (endE: TouchEvent) => {
-      const endTouch = endE.changedTouches[0];
-      const endX = endTouch.clientX;
-      const diff = startX - endX;
-
-      if (Math.abs(diff) > 50) {
-        if (diff > 0) {
-          onNext();
-        } else {
-          onPrevious();
-        }
-      }
-
-      containerRef.current?.removeEventListener('touchend', handleTouchEnd);
-    };
-
-    containerRef.current?.addEventListener('touchend', handleTouchEnd);
-  };
-
   function formatTime(seconds) {
     if (!seconds || isNaN(seconds)) return "00:00";
     const m = Math.floor(seconds / 60);
@@ -86,17 +170,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [showControls, setShowControls] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const lastTapRef = useRef(0);
 
-  const handleTouch = () => {
+  const handleVideoTouch = () => {
     togglePlay();
-    // const now = Date.now();
-    // const DOUBLE_TAP_DELAY = 300; // ms
-    // if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-    //   // Double tap detected
-    //   setShowControls((prev) => !prev);
-    // }
-    // lastTapRef.current = now;
   };
 
   const [btnState, setBtnState] = useState(0); // 0, 1, 2
@@ -106,6 +182,19 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   };
 
   const onFullscreen = () => {
+    if (isImage) {
+      if (isZoomed) {
+        resetZoom();
+      } else {
+        const zoom = getZoomScale();
+        setZoomScale(zoom);
+        setPanX(0);
+        setPanY(0);
+        setIsZoomed(true);
+      }
+      return;
+    }
+
     const video = videoRef.current;
 
     if (!video) return;
@@ -145,7 +234,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             className="media-element"
             onMouseEnter={() => setShowControls(true)}   // desktop hover
             onMouseLeave={() => setShowControls(false)}
-            onTouchEnd={handleTouch} 
+            onTouchEnd={handleVideoTouch}
             onLoadedMetadata={(e) =>
               setDuration(e.currentTarget.duration)
             }
@@ -160,7 +249,27 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           />
         )}
         {isImage && (
-          <img src={mediaUrl} alt={item.name} className="media-element" />
+          <div
+            className="image-zoom-wrapper"
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={handleImagePointerUp}
+            onPointerCancel={handleImagePointerUp}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchEnd={handleImageTouchEnd}
+          >
+            <img
+              ref={imgRef}
+              src={mediaUrl}
+              alt={item.name}
+              className="media-element image-zoomable"
+              draggable={false}
+              style={{
+                transform: `scale(${zoomScale}) translate(${panX}px, ${panY}px)`,
+                transformOrigin: 'center center',
+              }}
+            />
+          </div>
         )}
       </div>
 
