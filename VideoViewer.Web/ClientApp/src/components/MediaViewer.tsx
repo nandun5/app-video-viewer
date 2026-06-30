@@ -30,14 +30,28 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [panY, setPanY] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [mediaStatus, setMediaStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [bufferedPercent, setBufferedPercent] = useState(0);
+  const [isPlaybackReady, setIsPlaybackReady] = useState(false);
+  const hasAutoPlayedRef = useRef(false);
 
   useEffect(() => {
-    setZoomScale(1);
     setPanX(0);
     setPanY(0);
-    setIsZoomed(false);
     setIsPanning(false);
-  }, [item]);
+    setMediaStatus('loading');
+    setBufferedPercent(0);
+    setIsPlaybackReady(false);
+    hasAutoPlayedRef.current = false;
+    lastTapRef.current = 0;
+
+    if (!isImage) {
+      resetZoom();
+      return;
+    }
+
+    setZoomScale(1);
+  }, [item, isImage]);
 
   const getZoomScale = () => {
     const container = containerRef.current;
@@ -128,6 +142,59 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         setIsZoomed(true);
       }
       lastTapRef.current = 0;
+    }
+  };
+
+  const handleImageLoad = () => {
+    if (!isImage) {
+      return;
+    }
+
+    setMediaStatus('ready');
+
+    if (isZoomed) {
+      setZoomScale(getZoomScale());
+      setPanX(0);
+      setPanY(0);
+    }
+  };
+
+  const handleMediaError = () => {
+    setMediaStatus('error');
+  };
+
+  const updateBufferedProgress = (video: HTMLVideoElement | null) => {
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+      setBufferedPercent(0);
+      return;
+    }
+
+    let bufferedEnd = 0;
+    for (let index = 0; index < video.buffered.length; index += 1) {
+      bufferedEnd = Math.max(bufferedEnd, video.buffered.end(index));
+    }
+
+    const nextPercent = Math.min(100, Math.max(0, (bufferedEnd / video.duration) * 100));
+    setBufferedPercent(nextPercent);
+
+    const bufferThreshold = Math.min(8, Math.max(2, video.duration * 0.12));
+    if (!hasAutoPlayedRef.current && video.readyState >= 2 && bufferedEnd >= bufferThreshold) {
+      hasAutoPlayedRef.current = true;
+      setIsPlaybackReady(false);
+      setMediaStatus('loading');
+      video.muted = true;
+      void video.play()
+        .then(() => {
+          setMediaStatus('ready');
+          setIsPlaybackReady(true);
+        })
+        .catch(() => {
+          video.muted = true;
+          void video.play().catch(() => {
+            setMediaStatus('ready');
+            setIsPlaybackReady(true);
+          });
+        });
     }
   };
 
@@ -224,7 +291,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           <video
             ref={videoRef}
             src={mediaUrl}
-            autoPlay
             playsInline
             preload="metadata"
             loop={btnState === 0}
@@ -235,9 +301,18 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             onMouseEnter={() => setShowControls(true)}   // desktop hover
             onMouseLeave={() => setShowControls(false)}
             onTouchEnd={handleVideoTouch}
-            onLoadedMetadata={(e) =>
-              setDuration(e.currentTarget.duration)
-            }
+            onLoadedMetadata={(e) => {
+              setDuration(e.currentTarget.duration);
+              updateBufferedProgress(e.currentTarget);
+            }}
+            onCanPlay={() => updateBufferedProgress(videoRef.current)}
+            onProgress={(e) => updateBufferedProgress(e.currentTarget)}
+            onPlaying={() => {
+              setMediaStatus('ready');
+              setIsPlaybackReady(true);
+            }}
+            onWaiting={() => setMediaStatus('loading')}
+            onError={handleMediaError}
             onTimeUpdate={(e) =>
               setCurrent(e.currentTarget.currentTime)
             }
@@ -264,6 +339,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
               alt={item.name}
               className="media-element image-zoomable"
               draggable={false}
+              onLoad={handleImageLoad}
+              onError={handleMediaError}
               style={{
                 transform: `scale(${zoomScale}) translate(${panX}px, ${panY}px)`,
                 transformOrigin: 'center center',
@@ -272,6 +349,19 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           </div>
         )}
       </div>
+
+      {((mediaStatus === 'loading' || mediaStatus === 'error') && (isVideo || isImage)) && (
+        <div className={`media-status-bar ${mediaStatus}`} role="status" aria-live="polite">
+          <div className="media-progress-track" aria-hidden="true">
+            <div className="media-progress-fill" style={{ width: `${isVideo ? bufferedPercent : 100}%` }} />
+          </div>
+          <span className="media-status-dot" />
+          <span>
+            {mediaStatus === 'loading' && (isVideo ? `Buffering ${Math.round(bufferedPercent)}%` : 'Loading image…')}
+            {mediaStatus === 'error' && 'Unable to load media'}
+          </span>
+        </div>
+      )}
 
       <div className="media-controls">
         <button

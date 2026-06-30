@@ -314,6 +314,65 @@ body {
   background-color: #1a1a1a;
 } */
 
+.media-status-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem 0.4rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.68rem;
+  z-index: 1101;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+.media-status-bar.error {
+  background: linear-gradient(180deg, transparent, rgba(80, 0, 0, 0.35));
+}
+
+.media-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.18rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.media-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.9), rgba(34, 197, 94, 0.9));
+  transition: width 120ms ease-out;
+}
+
+.media-status-dot {
+  position: relative;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+  margin-bottom: 0.05rem;
+}
+
+.media-status-bar.error .media-status-dot {
+  background-color: rgba(248, 113, 113, 0.9);
+}
+
+.media-status-bar.loading .media-status-dot {
+  animation: pulse-status 1s infinite ease-in-out;
+}
+
+@keyframes pulse-status {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
 .media-controls {
   position: absolute;
   bottom: 0;
