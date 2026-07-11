@@ -29,6 +29,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomMode, setZoomMode] = useState<0 | 1 | 2>(0);
   const [isPanning, setIsPanning] = useState(false);
   const [mediaStatus, setMediaStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [bufferedPercent, setBufferedPercent] = useState(0);
@@ -50,7 +51,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
       return;
     }
 
-    setZoomScale(1);
+    resetZoom();
   }, [item, isImage]);
 
   const getZoomScale = () => {
@@ -76,6 +77,38 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     setPanX(0);
     setPanY(0);
     setIsZoomed(false);
+    setZoomMode(0);
+  };
+
+  const applyZoomMode = (mode: 0 | 1 | 2) => {
+    if (mode === 0) {
+      resetZoom();
+      return;
+    }
+
+    if (mode === 1) {
+      const zoom = getZoomScale();
+      setZoomScale(zoom);
+      setPanX(0);
+      setPanY(0);
+      setIsZoomed(true);
+      setZoomMode(1);
+      return;
+    }
+
+    setZoomScale(1);
+    setPanX(0);
+    setPanY(0);
+    setIsZoomed(true);
+    setZoomMode(2);
+  };
+
+  const cycleZoomMode = () => {
+    setZoomMode((prev) => {
+      const nextMode = prev === 0 ? 1 : prev === 1 ? 2 : 0;
+      applyZoomMode(nextMode as 0 | 1 | 2);
+      return nextMode as 0 | 1 | 2;
+    });
   };
 
   const clampPan = (x: number, y: number) => {
@@ -132,17 +165,37 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
     if (elapsed < 300) {
       e.preventDefault();
-      if (isZoomed) {
-        resetZoom();
-      } else {
-        const zoom = getZoomScale();
-        setZoomScale(zoom);
-        setPanX(0);
-        setPanY(0);
-        setIsZoomed(true);
-      }
+      cycleZoomMode();
       lastTapRef.current = 0;
     }
+  };
+
+  const handleImageDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    cycleZoomMode();
+  };
+
+  const getImageStyle = () => {
+    const img = imgRef.current;
+    const isActualSizeMode = zoomMode === 2;
+
+    const baseStyle: React.CSSProperties = {
+      transform: `scale(${zoomScale}) translate(${panX}px, ${panY}px)`,
+      transformOrigin: 'center center',
+    };
+
+    if (!isActualSizeMode || !img) {
+      return baseStyle;
+    }
+
+    return {
+      ...baseStyle,
+      width: `${img.naturalWidth || img.clientWidth || 0}px`,
+      height: `${img.naturalHeight || img.clientHeight || 0}px`,
+      maxWidth: 'none',
+      maxHeight: 'none',
+      objectFit: 'contain',
+    };
   };
 
   const handleImageLoad = () => {
@@ -152,8 +205,12 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
     setMediaStatus('ready');
 
-    if (isZoomed) {
+    if (zoomMode === 1) {
       setZoomScale(getZoomScale());
+      setPanX(0);
+      setPanY(0);
+    } else if (zoomMode === 2) {
+      setZoomScale(1);
       setPanX(0);
       setPanY(0);
     }
@@ -332,6 +389,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             onPointerCancel={handleImagePointerUp}
             onTouchStart={(e) => e.preventDefault()}
             onTouchEnd={handleImageTouchEnd}
+            onDoubleClick={handleImageDoubleClick}
           >
             <img
               ref={imgRef}
@@ -341,10 +399,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
               draggable={false}
               onLoad={handleImageLoad}
               onError={handleMediaError}
-              style={{
-                transform: `scale(${zoomScale}) translate(${panX}px, ${panY}px)`,
-                transformOrigin: 'center center',
-              }}
+              style={getImageStyle()}
             />
           </div>
         )}
